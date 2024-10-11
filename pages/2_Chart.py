@@ -7,6 +7,16 @@ import folium
 from notebooks.utils import *
 import random
 import os
+
+# Page config
+st.set_page_config(
+    page_title="Interactive Map 🗺️ ",
+
+    layout="wide",
+    initial_sidebar_state="expanded")
+st.write('ℹ️ The dataset size is reduced to reduce webpage lag')
+st.write('💡 Hold and drag the mouse button on the top panel to filter out the date. You can also click on the bars in the bar chart to preview unique addresses.')
+
 alt.themes.enable("dark")
 column_names = [
     'id', 'date', 'store_nbr', 'family', 'sales', 'onpromotion', 'year', 'month', 'day', 'city', 'state', 'type', 
@@ -15,27 +25,23 @@ column_names = [
 
 @st.cache_data
 # Set the path to the data file using an absolute path
-data_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'train.csv')
+#data_path = ('data\train_final.csv')
 
 
 def load_data(path):
     df = pd.read_csv(path, header=None)
     return df
+#         raise FileNotFoundError(f"The file {path} does not exist.")
 
-# Load the data using the absolute path
-df = load_data(data_file_path)
+# try:
+df = load_data('data/train_final.csv')
+#     print("Data loaded successfully")
+# except FileNotFoundError as e:
+#     print(f"Error: {e}")
 
 
-    # Page config
-st.set_page_config(
-    page_title="Interactive Map 🗺️ ",
-
-    layout="wide",
-    initial_sidebar_state="expanded")
-st.write('ℹ️ The dataset size is reduced to reduce webpage lag')
-st.write('💡 Hold and drag the mouse button on the top panel to filter out the date. You can also click on the bars in the bar chart to preview unique addresses.')
 ######## Load data ###########
-df = load_data('../data/train.csv')
+df = load_data('data/train_final.csv')
 df.columns = column_names
 #df = df3[-200000:]
 #df.drop('id',axis=1,inplace=True)
