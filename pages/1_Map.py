@@ -8,26 +8,35 @@ import folium
 from notebooks.utils import *
 import random
 import os
+
+ # Page config
+st.set_page_config(
+    page_title="Interactive Map 🗺️ ",
+
+    layout="wide",
+    initial_sidebar_state="expanded")
+
 alt.themes.enable("dark")
 column_names = [
     'id', 'date', 'store_nbr', 'family', 'sales', 'onpromotion', 'year', 'month', 'day', 'city', 'state', 'type', 
     'cluster', 'Full_Address', 'latitude', 'longitude'
 ]
 
+@st.cache_data
 
 # Print current working directory
-print("Current working directory:", os.getcwd())
+# print("Current working directory:", os.getcwd())
 
-# Construct the full path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
-data_path = os.path.join(project_root, 'data', 'train.csv')
-
+# # Construct the full path
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# project_root = os.path.dirname(current_dir)
+# #data_path = os.path.join(project_root, 'data', 'train.csv')
+#data_path = r"..\data\train_final.csv"
 # Check if file exists
-print("File exists:", os.path.exists(data_path))
+#print("File exists:", os.path.exists(data_path))
 
 # Print full path
-print("Full path:", data_path)
+#print("Full path:", data_path)
 
 def load_data(path):
     if os.path.exists(path):
@@ -36,22 +45,17 @@ def load_data(path):
         raise FileNotFoundError(f"The file {path} does not exist.")
 
 # Try to load the data
+#print("Hi")
+
 try:
-    df = load_data(data_path)
+    df = load_data('data/train_final.csv')
     print("Data loaded successfully")
 except FileNotFoundError as e:
     print(f"Error: {e}")
 
-
-    # Page config
-st.set_page_config(
-    page_title="Interactive Map 🗺️ ",
-
-    layout="wide",
-    initial_sidebar_state="expanded")
-
+   
 ######## Load data ###########
-df = load_data('../data/train.csv')
+df = load_data('data/train_final.csv')
 df.columns = column_names
 #df.drop('id',axis=1,inplace=True)
 
