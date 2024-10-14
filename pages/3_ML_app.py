@@ -1,73 +1,159 @@
 import streamlit as st
 import pandas as pd
+import seaborn as sns
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.metrics import r2_score, mean_absolute_error
 import plotly.graph_objects as go
 import plotly.express as px
-import xgboost as xgb
-from sklearn.metrics import mean_squared_log_error
+import utils
 
-# Load the test dataset (for demonstration, simulate loading the processed CSV)
-df_test = pd.read_csv('notebooks/df_test_pred.csv')  # Assuming this is the saved output with predictions
+def feautreImportancePlot(model, X_train):
+    """
+        Generate a bar chart of feature importances for the given model.
 
-# Display basic information to users
-st.title("Sales Prediction Dashboard")
+        Parameters:
+            - model (object): The trained model with a `feature_importances_` attribute.
+            - X_train (DataFrame): The training data used to train the model.
 
-st.markdown("""
-Welcome to the sales prediction dashboard. This tool allows you to view the predictions of our sales forecasting model.
-Below, you'll find visualizations comparing actual and predicted sales, as well as insights into which factors were most influential in making these predictions.
-""")
+        Returns:
+            - fig (plotly.graph_objects.Figure): The generated bar chart figure.
+    """
+    # Get the best model from the search
+    model = model.best_estimator_
 
-# 1. Sales Prediction Plot (Actual vs. Predicted Sales)
-st.header("Sales Prediction vs. Actual Sales")
+    # Calculate the feature importances
+    importances = model.feature_importances_
+    sorted_indices = np.argsort(importances)[::-1]
+    sorted_features = X_train.columns[sorted_indices]
 
-# Assuming df_test contains columns 'transactions', 'sales' (actual) and 'sales_pred' (predicted)
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_test['transactions'], y=df_test['sales'], mode='markers', name='Actual Sales', marker=dict(color='red')))
-fig.add_trace(go.Scatter(x=df_test['transactions'], y=df_test['sales_pred'], mode='markers', name='Predicted Sales', marker=dict(color='green')))
+    # Create a bar chart of feature importances
+    fig = px.bar(x=sorted_features, y=importances[sorted_indices])
+    fig.update_layout(
+        title='Feature Importances',
+        xaxis_title='Features',
+        yaxis_title='Importance',
+        plot_bgcolor='white',
+        width=800,
+        height=400,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
 
-# Calculate Mean Squared Log Error (MSLE)
-msle = mean_squared_log_error(df_test['sales'], df_test['sales_pred'])
+    return fig
 
-fig.update_layout(
-    title='Sales Prediction vs Actual Sales',
-    xaxis_title='Transactions',
-    yaxis_title='Sales',
-    annotations=[go.layout.Annotation(x=40, y=df_test['sales'].max(), 
-                                      text=f"Mean Squared Log Error (MSLE): {msle:.4f}",
-                                      showarrow=False)]
-)
+@st.cache_resource
+def run_model(data, max_depth, min_samples_leaf):
+    """
+        Train a random forest regression model with the given parameters and evaluate its performance.
 
-st.plotly_chart(fig)
+        Parameters:
+            - data (DataFrame): The input data containing both features and target variable.
+            - max_depth (tuple): A tuple specifying the range of maximum depth values to search during hyperparameter tuning.
+            - min_samples_leaf (int): The minimum number of samples required to be at a leaf node.
 
-# 2. Feature Importance Plot
-st.header("Top Features Influencing Sales Predictions")
+        Returns:
+            - model (RandomizedSearchCV): The trained model after hyperparameter tuning.
+            - X_test (DataFrame): The test data features.
+            - y_test (Series): The test data target variable.
+            - fig (plotly.graph_objects.Figure): The feature importance plot for the model.
+    """
+    # Separation of traits and targets
 
-# Simulate feature importance data (assuming this is generated from the XGBoost model)
-# Here, we're assuming some feature importances; replace this with actual values from the model if available
-feature_importances = {
-    'transactions': 0.45,
-    'oil_price': 0.25,
-    'store_type': 0.15,
-    'holiday': 0.10,
-    'promo': 0.05
-}
+    y = data['sales']
+    X = data.drop('sales', axis=1)
 
-# Create a bar chart using Plotly Express
-importance_fig = px.bar(
-    x=list(feature_importances.keys()), 
-    y=list(feature_importances.values()), 
-    labels={'x': 'Feature', 'y': 'Importance'},
-    title="Feature Importances"
-)
+    # Separate training and test data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    st.write('Selected max_depth:', max_depth, '& min_samples_leat:', min_samples_leaf)
 
-st.plotly_chart(importance_fig)
+    random_search = {'max_depth': [i for i in range(max_depth[0], max_depth[1])],
+                     'min_samples_leaf': [min_samples_leaf]}
 
-# 3. Data Preview (Actual and Predicted Sales)
-st.header("Sample Data (Actual vs. Predicted Sales)")
+    clf = RandomForestRegressor()
+    model = RandomizedSearchCV(estimator = clf, param_distributions = random_search, n_iter = 10,
+                                   cv = 4, verbose= 1, random_state= 101, n_jobs = -1)
+    model = model.fit(X_train, y_train)
+    fig = feautreImportancePlot(model, X_train)
 
-# Display the first few rows of the dataset for clarity
-st.dataframe(df_test[['date', 'store_nbr', 'sales', 'sales_pred']].head())
+    return model, X_test, y_test, fig
 
-st.markdown("This table shows a sample of the actual sales alongside the model's predictions. The model uses transaction data, store information, and other factors to make these predictions.")
+def prediction(model, X_test, y_test):
+    """
+        Make predictions using the trained model and evaluate its performance.
 
-# Final message
-st.write("This dashboard is a simple overview of the model's performance and key insights.")
+        Parameters:
+            - model (RandomizedSearchCV): The trained model.
+            - X_test (DataFrame): The test data features.
+            - y_test (Series): The test data target variable.
+
+        Returns:
+            - y_test_pred (array-like): The predicted target variable values.
+            - test_mae (float): The mean absolute error between the predicted and actual target variable values.
+            - r2 (float): The coefficient of determination (R-squared) score between the predicted and actual target variable values.
+    """
+    # Prediction
+    y_test_pred = model.predict(X_test)
+
+    # Performance Evaluations
+    test_mae = mean_absolute_error(y_test, y_test_pred)
+    r2 = r2_score(y_test, y_test_pred)
+
+    return y_test_pred, test_mae, r2
+
+def prediction_plot(X_test, y_test, y_test_pred, test_mae, r2):
+    """
+        Create a scatter plot to visualize the predicted and actual target variable values.
+
+        Parameters:
+            - X_test (DataFrame): The test data features.
+            - y_test (Series): The actual target variable values.
+            - y_test_pred (array-like): The predicted target variable values.
+            - test_mae (float): The mean absolute error between the predicted and actual target variable values.
+            - r2 (float): The coefficient of determination (R-squared) score between the predicted and actual target variable values.
+    """
+    # Graph
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(x=X_test['transactions'], y=y_test, mode='markers', name='test', marker=dict(color='red'))
+    )
+    fig.add_trace(
+        go.Scatter(x=X_test['transactions'], y=y_test_pred, mode='markers', name='prediction', marker=dict(color='green'))
+    )
+
+    fig.update_layout(
+        title='Sales Prediction with RandomForestRegressor by Store Number',
+        xaxis_title='Transactions',
+        yaxis_title='Sales',
+        annotations=[go.layout.Annotation(x=40, y=y_test.max(), text=f'Test MAE: {test_mae:.3f}<br>R2 Score: {r2:.3f}', showarrow=False)]
+    )
+
+    st.plotly_chart(fig)
+
+def ml_app():
+    """
+        Streamlit app for the machine learning section.
+
+        The app allows the user to select hyperparameters, load the necessary data, run the model,
+        make predictions, and visualize the prediction results.
+    """
+    # Hyperparameters
+    max_depth = st.select_slider("Select max depth", options=[i for i in range(2, 30)], value=(5, 10), key='ml1')
+    min_samples_leaf = st.slider("Minimum samples leaf", min_value=2, max_value=20, key='ml2')
+
+    train, test, transactions, stores, oil, holidays = utils.load_data()
+
+    df_data = train.merge(transactions, how='left', on=['date','store_nbr'])
+
+    store_num = int(st.sidebar.number_input(label='store_nbr', step=1, min_value=1, max_value=df_data['store_nbr'].max()))
+
+    data = pd.get_dummies(df_data.loc[df_data['store_nbr'] == store_num, ['family', 'transactions', 'sales']].dropna())
+
+    model, X_test, y_test, fig1 = run_model(data, max_depth, min_samples_leaf)
+    y_test_pred, test_mae, r2 = prediction(model, X_test, y_test)
+
+    prediction_plot(X_test, y_test, y_test_pred, test_mae, r2)
+
+    st.markdown('<hr>', unsafe_allow_html=True)
+    # Get the best model from the search
+    st.plotly_chart(fig1)
